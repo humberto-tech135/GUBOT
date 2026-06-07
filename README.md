@@ -20,4 +20,6 @@ Desenvolver uma solução acessível para auxiliar a locomoção de pessoas com 
 
 ## Equipe
 
-GUBOT & GRAVITECH
+Jose Humberto
+Samuel Araujo
+Jose Gabriel
