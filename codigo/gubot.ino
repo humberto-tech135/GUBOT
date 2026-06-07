@@ -1,147 +1,127 @@
-#include <Servo.h>
 
-Servo sensorServo;
+// declaracao dos pinos do sensor ultrassonico
+const int PINO_SENSOR_ECHO = 13;
+const int PINO_SENSOR_TRIGGER = 12;
 
-// ===== MAPEAMENTO DE PINOS =====
-#define TRIG 9
-#define ECHO 10
-#define SERVO_PIN 4 // Porta corrigida para liberar os PWMs dos motores
+// declaracao dos pinos do driver de motor
+const int PIN_MOTOR_IN1 = 2;
+const int PIN_MOTOR_IN2 = 3;
+const int PIN_MOTOR_IN3 = 4;
+const int PIN_MOTOR_IN4 = 5;
 
-// Motores (Todos conectados em portas PWM d Arduino Uno!)
-#define M1A 5   // Motor Esquerdo (Avanço)
-#define M1B 6   // Motor Esquerdo (Recuo)
-#define M2A 3   // Motor Direito (Avanço)
-#define M2B 11  // Motor Direito (Recuo)
+// declaracao das constantes auxiliares para controlar os motores
+const int DISTANCIA_SEGURA = 25; // [cm]
+const int PAUSA = 100; // [ms]
 
-// ===== CONFIGURAÇÕES GERAIS =====
-// Altere este valor (de 0 a 255) para controlar a velocidade de AMBOS os motores juntos.
-// 140 é um excelente valor para o robô andar calmo e seguro em cima de uma mesa.
-int velocidade = 90;     
+// ---------------------------------------------------
 
-int distanciaLimite = 20; // Distância de segurança para desviar (em cm)
-int frente = 90;          // Ângulo central do servo
-int direita = 20;         // Ângulo para olhar à direita
-int esquerda = 160;       // Ângulo para olhar à esquerda
+int ler_distancia(void);
+void mover_frente(void);
+void mover_tras(void);
+void parar(void);
+
+// ---------------------------------------------------
 
 void setup() {
-  Serial.begin(9600);
+  // configura os pinos do sensor ultrassonico
+  pinMode(PINO_SENSOR_ECHO, INPUT); // entrada
+  pinMode(PINO_SENSOR_TRIGGER, OUTPUT); // saida
+  digitalWrite(PINO_SENSOR_TRIGGER, LOW); // por padrao em nivel baixo (sem sinal)
 
-  // Inicialização do Sensor Ultrassônico
-  pinMode(TRIG, OUTPUT);
-  pinMode(ECHO, INPUT);
-
-  // Inicialização dos Pinos dos Motores
-  pinMode(M1A, OUTPUT);
-  pinMode(M1B, OUTPUT);
-  pinMode(M2A, OUTPUT);
-  pinMode(M2B, OUTPUT);
-
-  // Inicialização do Servo no centro
-  sensorServo.attach(SERVO_PIN);
-  sensorServo.write(frente);
-
-  delay(1000); // Aguarda 1 segundo antes de iniciar para dar estabilidade elétrica
+  // configura os pinos do driver de motor
+  pinMode(PIN_MOTOR_IN1, OUTPUT); // saida
+  pinMode(PIN_MOTOR_IN2, OUTPUT); // saida
+  pinMode(PIN_MOTOR_IN3, OUTPUT); // saida
+  pinMode(PIN_MOTOR_IN4, OUTPUT); // saida
+  parar(); // robo parado por padrao
 }
+
+// ---------------------------------------------------
 
 void loop() {
-  int distanciaFrente = medirDistancia();
+  // le a distancia
+  int distancia = ler_distancia();
 
-  // Se o caminho estiver livre, o GUBOT avança na velocidade controlada
-  if (distanciaFrente > distanciaLimite) {
-    andarFrente();
-  }
-  // Se encontrar um obstáculo à frente, para e analisa as laterais
-  else {
-    pararMotores();
-    delay(300);
+  // verifica se ha um obstaculo na frente
+  if(distancia < DISTANCIA_SEGURA){
+    // para o robo
+    parar();
+    delay(500); // pausa para o proximo movimento
 
-    // Varredura para a DIREITA
-    sensorServo.write(direita);
-    delay(600);
-    int distDireita = medirDistancia();
+    // move o robo para tras
+    mover_tras();
 
-    // Retorno rápido ao centro
-    sensorServo.write(frente);
-    delay(300);
+    // para o robo apos um curto intervalo
+    delay(1000);
+    parar();
 
-    // Varredura para a ESQUERDA
-    sensorServo.write(esquerda);
-    delay(600);
-    int distEsquerda = medirDistancia();
-
-    // Retorno definitivo ao centro
-    sensorServo.write(frente);
-    delay(300);
-
-    // Envia dados para o monitor serial (ajuda a debugar caso precise)
-    Serial.print("Direita: ");
-    Serial.println(distDireita);
-    Serial.print("Esquerda: ");
-    Serial.println(distEsquerda);
-
-    // Decisão de rota: vira para o lado que tiver maior espaço livre
-    if (distDireita > distEsquerda) {
-      virarDireita();
-      delay(500); // Tempo necessário para o robô girar o corpo (ajuste se necessário)
-    } 
-    else {
-      virarEsquerda();
-      delay(500); // Tempo necessário para o robô girar o corpo (ajuste se necessário)
+    // escolhe um dos lados para girar
+    bool par = (millis() % 2 == 0) ? true : false;
+    if(par){
+      // gira o motor 1 para a frente
+      digitalWrite(PIN_MOTOR_IN1, HIGH);
+      digitalWrite(PIN_MOTOR_IN2, LOW);
+    } else {
+      // gira o motor 2 para a frente
+      digitalWrite(PIN_MOTOR_IN3, HIGH);
+      digitalWrite(PIN_MOTOR_IN4, LOW);
     }
 
-    pararMotores();
-    delay(200);
+    // para o robo apos um curto intervalo
+    delay(500);
+    parar();
+  } else { // senao
+    // move o robo para a frente
+    mover_frente();
   }
+
+  // pausa para a proxima leitura
+  delay(PAUSA);
 }
 
-// ===== FUNÇÕES DE LEITURA =====
+// ---------------------------------------------------
+// ---------------------------------------------------
 
-int medirDistancia() {
-  digitalWrite(TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG, HIGH);
+// Ler a distancia com o sensor ultrassonico
+int ler_distancia(void){
+  // realiza o pulso de 10 microsegundos no trigger do sensor
+  digitalWrite(PINO_SENSOR_TRIGGER,HIGH);
   delayMicroseconds(10);
-  digitalWrite(TRIG, LOW);
+  digitalWrite(PINO_SENSOR_TRIGGER,LOW);
 
-  long duracao = pulseIn(ECHO, HIGH);
-  int distancia = duracao * 0.034 / 2;
-
-  // Filtro de erro: se a leitura falhar (retornar 0), assume caminho livre temporariamente
-  if (distancia == 0) return 999; 
-  return distancia;
+  // mede o pulso em microsegundos retornado para o echo do sensor
+  // e converte o tempo para distancia ao dividir por 58
+  return pulseIn(PINO_SENSOR_ECHO, HIGH) / 58; // [cm]
 }
 
-// ===== FUNÇÕES DE MOVIMENTAÇÃO SIMÉTRICA =====
+// ---------------------------------------------------
 
-void andarFrente() {
-  analogWrite(M1A, velocidade); // Motor Esquerdo com velocidade controlada
-  digitalWrite(M1B, LOW);
-
-  analogWrite(M2A, velocidade); // Motor Direito com a MESMA velocidade controlada
-  digitalWrite(M2B, LOW);
+// Mover o robo para a frente
+void mover_frente(void){
+  digitalWrite(PIN_MOTOR_IN1, HIGH);
+  digitalWrite(PIN_MOTOR_IN2, LOW);
+  digitalWrite(PIN_MOTOR_IN3, HIGH);
+  digitalWrite(PIN_MOTOR_IN4, LOW);
 }
 
-void pararMotores() {
-  digitalWrite(M1A, LOW);
-  digitalWrite(M1B, LOW);
-  digitalWrite(M2A, LOW);
-  digitalWrite(M2B, LOW);
+// ---------------------------------------------------
+
+// Mover o robo para tras
+void mover_tras(void){
+  digitalWrite(PIN_MOTOR_IN1, LOW);
+  digitalWrite(PIN_MOTOR_IN2, HIGH);
+  digitalWrite(PIN_MOTOR_IN3, LOW);
+  digitalWrite(PIN_MOTOR_IN4, HIGH);
 }
 
-void virarDireita() {
-  analogWrite(M1A, velocidade); // Avança motor esquerdo
-  digitalWrite(M1B, LOW);
+// ---------------------------------------------------
 
-  digitalWrite(M2A, LOW);
-  analogWrite(M2B, velocidade); // Recua motor direito (giro sob o próprio eixo)
+// Parar o robo
+void parar(void){
+  digitalWrite(PIN_MOTOR_IN1, LOW);
+  digitalWrite(PIN_MOTOR_IN2, LOW);
+  digitalWrite(PIN_MOTOR_IN3, LOW);
+  digitalWrite(PIN_MOTOR_IN4, LOW);
 }
 
-void virarEsquerda() {
-  digitalWrite(M1A, LOW);
-  analogWrite(M1B, velocidade); // Recua motor esquerdo
-
-  analogWrite(M2A, velocidade); // Avança motor direito (giro sob o próprio eixo)
-  digitalWrite(M2B, LOW);
-}
-
-//codigo por humberto
+// ---------------------------------------------------
