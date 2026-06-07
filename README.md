@@ -20,6 +20,6 @@ Desenvolver uma solução acessível para auxiliar a locomoção de pessoas com 
 
 ## Equipe
 
-Jose Humberto
-Samuel Araujo
-Jose Gabriel
+Jose Humberto.
+Samuel Araujo.
+Jose Gabriel.
